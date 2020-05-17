@@ -1,3 +1,4 @@
+![Downloads](https://img.shields.io/github/downloads/PirateNetwork/PirateOcean/total)
 # PirateOcean (pirate-qt) #
 
 Pirate-Qt (PirateOcean) is a world's first Qt native wallet for ARRR ([Pirate](https://pirate.black/)). It's available for three OS platforms - Windows, Linux, MacOS.
@@ -82,5 +83,5 @@ cd PirateOcean
 
 ## Developers of Qt wallet ##
 - Pirate developer: [@ComputerGenie](https://github.com/TheComputerGenie)
-- Main developer: [@Ocean](https://pirate-platform.slack.com/team/U8BRG09EV)
-- IT Expert / Sysengineer: [@Decker](https://pirate-platform.slack.com/messages/D5UHJMCJ3)
+- Main developer: **Ocean**
+- IT Expert / Sysengineer: **Decker**

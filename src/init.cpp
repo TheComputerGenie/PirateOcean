@@ -89,9 +89,10 @@
 #endif
 
 #include "librustzcash.h"
-
+#include "wallet/asyncrpcoperation_saplingconsolidation.h"
 using namespace std;
 
+#include "komodo_defs.h"
 extern void ThreadSendAlert();
 extern bool komodo_dailysnapshot(int32_t height);
 extern int32_t KOMODO_LOADINGBLOCKS;
@@ -376,7 +377,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-blocknotify=<cmd>", _("Execute command when the best block changes (%s in cmd is replaced by block hash)"));
     strUsage += HelpMessageOpt("-checkblocks=<n>", strprintf(_("How many blocks to check at startup (default: %u, 0 = all)"), 288));
     strUsage += HelpMessageOpt("-checklevel=<n>", strprintf(_("How thorough the block verification of -checkblocks is (0-4, default: %u)"), 3));
-    strUsage += HelpMessageOpt("-clientname=<SomeName>", _("Full node client name, default 'OceanChest'"));
+    strUsage += HelpMessageOpt("-clientname=<SomeName>", _("Full node client name, default 'BlueGlaucus'"));
     strUsage += HelpMessageOpt("-conf=<file>", strprintf(_("Specify configuration file (default: %s)"), "komodo.conf"));
     if (mode == HMM_BITCOIND)
     {
@@ -443,6 +444,14 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageGroup(_("Wallet options:"));
     strUsage += HelpMessageOpt("-disablewallet", _("Do not load the wallet and disable wallet RPC calls"));
     strUsage += HelpMessageOpt("-keypool=<n>", strprintf(_("Set key pool size to <n> (default: %u)"), 100));
+    strUsage += HelpMessageOpt("-consolidation", _("Enable auto Sapling note consolidation"));
+    strUsage += HelpMessageOpt("-consolidatesaplingaddress=<zaddr>", _("Specify Sapling Address to Consolidate. (default: all)"));
+    strUsage += HelpMessageOpt("-consolidationtxfee", strprintf(_("Fee amount in Satoshis used send consolidation transactions. (default %i)"), DEFAULT_CONSOLIDATION_FEE));
+    strUsage += HelpMessageOpt("-deletetx", _("Enable Old Transaction Deletion"));
+    strUsage += HelpMessageOpt("-deleteinterval", strprintf(_("Delete transaction every <n> blocks during inital block download (default: %i)"), DEFAULT_TX_DELETE_INTERVAL));
+    strUsage += HelpMessageOpt("-keeptxnum", strprintf(_("Keep the last <n> transactions (default: %i)"), DEFAULT_TX_RETENTION_LASTTX));
+    strUsage += HelpMessageOpt("-keeptxfornblocks", strprintf(_("Keep transactions for at least <n> blocks (default: %i)"), DEFAULT_TX_RETENTION_BLOCKS));
+
     if (showDebug)
         strUsage += HelpMessageOpt("-mintxfee=<amt>", strprintf("Fees (in %s/kB) smaller than this are considered zero fee for transaction creation (default: %s)",
             CURRENCY_UNIT, FormatMoney(CWallet::minTxFee.GetFeePerK())));
@@ -494,7 +503,7 @@ std::string HelpMessage(HelpMessageMode mode)
         strUsage += HelpMessageOpt("-stopafterblockimport", strprintf("Stop running after importing blocks from disk (default: %u)", 0));
         strUsage += HelpMessageOpt("-nuparams=hexBranchId:activationHeight", "Use given activation height for specified network upgrade (regtest-only)");
     }
-    string debugCategories = "addrman, alert, bench, coindb, db, estimatefee, http, libevent, lock, mempool, net, partitioncheck, pow, proxy, prune, "
+    string debugCategories = "addrman, alert, bench, coindb, db, deletetx, estimatefee, http, libevent, lock, mempool, net, partitioncheck, pow, proxy, prune, "
                              "rand, reindex, rpc, selectcoins, tor, zmq, zrpc, zrpcunsafe (implies zrpc)"; // Don't translate these
     strUsage += HelpMessageOpt("-debug=<category>", strprintf(_("Output debugging information (default: %u, supplying <category> is optional)"), 0) + ". " +
         _("If <category> is not supplied or if <category> = 1, output all debugging information.") + " " + _("<category> can be:") + " " + debugCategories + ".");
@@ -504,7 +513,7 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-logtimestamps", strprintf(_("Prepend debug output with timestamp (default: %u)"), 1));
     if (showDebug)
     {
-        strUsage += HelpMessageOpt("-limitfreerelay=<n>", strprintf("Continuously rate-limit free transactions to <n>*1000 bytes per minute (default: %u)", 15));
+        strUsage += HelpMessageOpt("-limitfreerelay=<n>", strprintf("Continuously rate-limit free transactions to <n>*1000 bytes per minute (default: %u)", DEFAULT_LIMITFREERELAY));
         strUsage += HelpMessageOpt("-relaypriority", strprintf("Require high priority for relaying free or low-fee transactions (default: %u)", 0));
         strUsage += HelpMessageOpt("-maxsigcachesize=<n>", strprintf("Limit size of signature cache to <n> entries (default: %u)", 50000));
         strUsage += HelpMessageOpt("-maxtipage=<n>", strprintf("Maximum tip age in seconds to consider node in initial block download (default: %u)", DEFAULT_MAX_TIP_AGE));
@@ -799,7 +808,7 @@ static void ZC_LoadParams(
                 ZC_GetParamsDir()),
             "", CClientUIInterface::MSG_ERROR);
         StartShutdown();
-return;
+        return;
     }
 
     LogPrintf("Loading verifying key from %s\n", vk_path.string().c_str());
@@ -1011,7 +1020,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         return InitError(_("Not enough file descriptors available."));
     if (nFD - MIN_CORE_FILEDESCRIPTORS < nMaxConnections)
         nMaxConnections = nFD - MIN_CORE_FILEDESCRIPTORS;
-
+    LogPrintf("nMaxConnections %d\n",nMaxConnections);
     // if using block pruning, then disable txindex
     // also disable the wallet (for now, until SPV support is implemented in wallet)
     if (GetArg("-prune", 0)) {
@@ -1093,6 +1102,11 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     RegisterAllCoreRPCCommands(tableRPC);
 #ifdef ENABLE_WALLET
     bool fDisableWallet = GetBoolArg("-disablewallet", false);
+    if ( KOMODO_NSPV_SUPERLITE )
+    {
+        fDisableWallet = true;
+        nLocalServices = 0;
+    }
     if (!fDisableWallet)
         RegisterWalletRPCCommands(tableRPC);
 #endif
@@ -1169,9 +1183,11 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // Option to startup with mocktime set (used for regression testing):
     SetMockTime(GetArg("-mocktime", 0)); // SetMockTime(0) is a no-op
 
-    if (GetBoolArg("-peerbloomfilters", true))
-        nLocalServices |= NODE_BLOOM;
-
+    if ( KOMODO_NSPV_FULLNODE )
+    {
+        if (GetBoolArg("-peerbloomfilters", true))
+            nLocalServices |= NODE_BLOOM;
+    }
     nMaxTipAge = GetArg("-maxtipage", DEFAULT_MAX_TIP_AGE);
 
 #ifdef ENABLE_MINING
@@ -1335,11 +1351,12 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     libsnark::inhibit_profiling_info = true;
     libsnark::inhibit_profiling_counters = true;
 
-    uiInterface.InitMessage(_("Loading Sapling parameters..."));
-
-    // Initialize Zcash circuit parameters
-    ZC_LoadParams(chainparams);
-
+    if ( KOMODO_NSPV_FULLNODE )
+    {
+		uiInterface.InitMessage(_("Loading Sapling parameters..."));
+        // Initialize Zcash circuit parameters
+        ZC_LoadParams(chainparams);
+    }
     /* Start the RPC server already.  It will be started in "warmup" mode
      * and not really process calls already (but it will signify connections
      * that the server is there and will be ready later).  Warmup mode will
@@ -1516,36 +1533,23 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     }
 #endif
 
+    if ( KOMODO_NSPV_SUPERLITE )
+    {
+        std::vector<boost::filesystem::path> vImportFiles;
+        threadGroup.create_thread(boost::bind(&ThreadImport, vImportFiles));
+        StartNode(threadGroup, scheduler);
+        pcoinsTip = new CCoinsViewCache(pcoinscatcher);
+        InitBlockIndex();
+        SetRPCWarmupFinished();
+        uiInterface.InitMessage(_("Done loading"));
+        pwalletMain = new CWallet("tmptmp.wallet");
+        return !fRequestShutdown;
+    }
     // ********************************************************* Step 7: load block chain
 
     fReindex = GetBoolArg("-reindex", false);
 
-    // Upgrading to 0.8; hard-link the old blknnnn.dat files into /blocks/
-    boost::filesystem::path blocksDir = GetDataDir() / "blocks";
-    if (!boost::filesystem::exists(blocksDir))
-    {
-        boost::filesystem::create_directories(blocksDir);
-        bool linked = false;
-        for (unsigned int i = 1; i < 10000; i++) {
-            boost::filesystem::path source = GetDataDir() / strprintf("blk%04u.dat", i);
-            if (!boost::filesystem::exists(source)) break;
-            boost::filesystem::path dest = blocksDir / strprintf("blk%05u.dat", i-1);
-            try {
-                boost::filesystem::create_hard_link(source, dest);
-                LogPrintf("Hardlinked %s -> %s\n", source.string(), dest.string());
-                linked = true;
-            } catch (const boost::filesystem::filesystem_error& e) {
-                // Note: hardlink creation failing is not a disaster, it just means
-                // blocks will get re-downloaded from peers.
-                LogPrintf("Error hardlinking blk%04u.dat: %s\n", i, e.what());
-                break;
-            }
-        }
-        if (linked)
-        {
-            fReindex = true;
-        }
-    }
+    boost::filesystem::create_directories(GetDataDir() / "blocks");
 
     // block tree db settings
     int dbMaxOpenFiles = GetArg("-dbmaxopenfiles", DEFAULT_DB_MAX_OPEN_FILES);
@@ -1821,6 +1825,41 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             pwalletMain->GenerateNewSeed();
         }
 
+        //Set Sapling Consolidation
+        pwalletMain->fSaplingConsolidationEnabled = GetBoolArg("-consolidation", false);
+        fConsolidationTxFee  = GetArg("-consolidationtxfee", DEFAULT_CONSOLIDATION_FEE);
+        fConsolidationMapUsed = !mapMultiArgs["-consolidatesaplingaddress"].empty();
+
+        //Validate Sapling Addresses
+        vector<string>& vaddresses = mapMultiArgs["-consolidatesaplingaddress"];
+        for (int i = 0; i < vaddresses.size(); i++) {
+            LogPrintf("Consolidating Sapling Address: %s\n", vaddresses[i]);
+            auto zAddress = DecodePaymentAddress(vaddresses[i]);
+            if (!IsValidPaymentAddress(zAddress)) {
+                return InitError("Invalid consolidation address");
+            }
+        }
+
+        //Set Transaction Deletion Options
+        fTxDeleteEnabled = GetBoolArg("-deletetx", false);
+        fTxConflictDeleteEnabled = GetBoolArg("-deleteconflicttx", true);
+
+        fDeleteInterval = GetArg("-deleteinterval", DEFAULT_TX_DELETE_INTERVAL);
+        if (fDeleteInterval < 1)
+          return InitError("deleteinterval must be greater than 0");
+
+        fKeepLastNTransactions = GetArg("-keeptxnum", DEFAULT_TX_RETENTION_LASTTX);
+        if (fKeepLastNTransactions < 1)
+          return InitError("keeptxnum must be greater than 0");
+
+        fDeleteTransactionsAfterNBlocks = GetArg("-keeptxfornblocks", DEFAULT_TX_RETENTION_BLOCKS);
+        if (fDeleteTransactionsAfterNBlocks < 1)
+          return InitError("keeptxfornblocks must be greater than 0");
+
+        if (fDeleteTransactionsAfterNBlocks < MAX_REORG_LENGTH + 1 ) {
+          LogPrintf("keeptxfornblock is less the MAX_REORG_LENGTH, Setting to %i\n", MAX_REORG_LENGTH + 1);
+          fDeleteTransactionsAfterNBlocks = MAX_REORG_LENGTH + 1;
+        }
         if (fFirstRun)
         {
             // Create new keyUser and set as default key
@@ -1935,7 +1974,14 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
             PruneAndFlush();
         }
     }
-
+    if ( KOMODO_NSPV == 0 )
+    {
+        if ( GetBoolArg("-addressindex", DEFAULT_ADDRESSINDEX) != 0 )
+            nLocalServices |= NODE_ADDRINDEX;
+        if ( GetBoolArg("-spentindex", DEFAULT_SPENTINDEX) != 0 )
+            nLocalServices |= NODE_SPENTINDEX;
+        LogPrintf("nLocalServices %llx %d, %d\n",(long long)nLocalServices,GetBoolArg("-addressindex", DEFAULT_ADDRESSINDEX),GetBoolArg("-spentindex", DEFAULT_SPENTINDEX));
+    }
     // ********************************************************* Step 10: import blocks
 
     if (mapArgs.count("-blocknotify"))

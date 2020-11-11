@@ -1,6 +1,6 @@
-![Downloads](https://img.shields.io/github/downloads/PirateNetwork/PirateOcean/total)
-[![Build Status](https://github.com/PirateNetwork/PirateOcean/workflows/PirateOcean%20Auto-release/badge.svg)](https://github.com/PirateNetwork/PirateOcean/actions)
-[![Version](https://img.shields.io/github/v/release/PirateNetwork/PirateOcean)](https://github.com/PirateNetwork/PirateOcean/releases)
+![Downloads](https://img.shields.io/github/downloads/TheComputerGenie/PirateOcean/total)
+[![Build Status](https://github.com/PirateNetwork/TheComputerGenie/workflows/PirateOcean%20Auto-release/badge.svg)](https://github.com/TheComputerGenie/PirateOcean/actions)
+[![Version](https://img.shields.io/github/v/release/TheComputerGenie/PirateOcean)](https://github.com/TheComputerGenie/PirateOcean/releases)
 # PirateOcean (pirate-qt) #
 
 Pirate-Qt (PirateOcean) is a world's first Qt native wallet for ARRR ([Pirate](https://pirate.black/)). It's available for three OS platforms - Windows, Linux, MacOS.
@@ -26,7 +26,7 @@ sudo apt-get install build-essential pkg-config libc6-dev m4 g++-multilib autoco
 ```
 
 ```shell
-git clone https://github.com/PirateNetwork/PirateOcean
+git clone https://github.com/TheComputerGenie/PirateOcean
 cd PirateOcean
 ./zcutil/fetch-params.sh
 # -j8 = using 8 threads for the compilation - replace 8 with number of threads you want to use
@@ -51,7 +51,7 @@ brew install gcc@8
 brew install binutils
 brew install wget
 # Clone the Pirate repo
-git clone https://github.com/PirateNetwork/PirateOcean
+git clone https://github.com/TheComputerGenie/PirateOcean
 cd PirateOcean
 ./zcutil/fetch-params.sh
 # -j8 = using 8 threads for the compilation - replace 8 with number of threads you want to use
@@ -72,7 +72,7 @@ sudo update-alternatives --config x86_64-w64-mingw32-gcc
 sudo update-alternatives --config x86_64-w64-mingw32-g++
 # (configure to use POSIX variant)
 
-git clone https://github.com/PirateNetwork/PirateOcean
+git clone https://github.com/TheComputerGenie/PirateOcean
 cd PirateOcean
 ./zcutil/build-win.sh -j8
 # -j8 = using 8 threads for the compilation - replace 8 with number of threads you want to use
